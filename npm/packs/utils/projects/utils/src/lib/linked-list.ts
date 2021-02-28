@@ -3,13 +3,9 @@
 import compare from 'just-compare';
 
 export class ListNode<T = any> {
-  readonly value: T;
   next: ListNode | undefined;
   previous: ListNode | undefined;
-
-  constructor(value: T) {
-    this.value = value;
-  }
+  constructor(public readonly value: T) {}
 }
 
 export class LinkedList<T = any> {
@@ -107,7 +103,7 @@ export class LinkedList<T = any> {
     };
   }
 
-  addAfter(value: T, nextValue: T): ListNode<T>;
+  addAfter(value: T, previousValue: T): ListNode<T>;
   addAfter(value: T, previousValue: any, compareFn: ListComparisonFn<T>): ListNode<T>;
   addAfter(value: T, previousValue: any, compareFn: ListComparisonFn<T> = compare): ListNode<T> {
     const previous = this.find(node => compareFn(node.value, previousValue));
@@ -177,7 +173,7 @@ export class LinkedList<T = any> {
     return previous ? this.attachMany(values, previous, previous.next) : this.addManyTail(values);
   }
 
-  addManyBefore(values: T[], previousValue: T): ListNode<T>[];
+  addManyBefore(values: T[], nextValue: T): ListNode<T>[];
   addManyBefore(values: T[], nextValue: any, compareFn: ListComparisonFn<T>): ListNode<T>[];
   addManyBefore(
     values: T[],
@@ -354,9 +350,9 @@ export class LinkedList<T = any> {
     return -1;
   }
 
-  forEach<R = boolean>(callback: ListIteratorFn<T, R>) {
+  forEach<R = boolean>(iteratorFn: ListIteratorFn<T, R>) {
     for (let node = this.first, position = 0; node; position++, node = node.next) {
-      callback(node, position, this);
+      iteratorFn(node, position, this);
     }
   }
 

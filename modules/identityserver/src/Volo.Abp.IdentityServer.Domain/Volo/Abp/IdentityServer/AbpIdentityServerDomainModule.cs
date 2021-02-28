@@ -6,17 +6,21 @@ using Microsoft.Extensions.Options;
 using Volo.Abp.AutoMapper;
 using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.Caching;
-using Volo.Abp.EventBus.Distributed;
+using Volo.Abp.Domain.Entities.Events.Distributed;
 using Volo.Abp.Identity;
 using Volo.Abp.IdentityServer.ApiResources;
+using Volo.Abp.IdentityServer.AspNetIdentity;
+using Volo.Abp.IdentityServer.ApiScopes;
 using Volo.Abp.IdentityServer.Clients;
 using Volo.Abp.IdentityServer.Devices;
-using Volo.Abp.IdentityServer.Grants;
 using Volo.Abp.IdentityServer.IdentityResources;
 using Volo.Abp.IdentityServer.Tokens;
 using Volo.Abp.Modularity;
+using Volo.Abp.ObjectExtending;
+using Volo.Abp.ObjectExtending.Modularity;
 using Volo.Abp.Security;
 using Volo.Abp.Validation;
+using Volo.Abp.Threading;
 
 namespace Volo.Abp.IdentityServer
 {
@@ -31,6 +35,8 @@ namespace Volo.Abp.IdentityServer
         )]
     public class AbpIdentityServerDomainModule : AbpModule
     {
+        private static readonly OneTimeRunner OneTimeRunner = new OneTimeRunner();
+
         public override void ConfigureServices(ServiceConfigurationContext context)
         {
             context.Services.AddAutoMapperObjectMapper<AbpIdentityServerDomainModule>();
@@ -40,7 +46,7 @@ namespace Volo.Abp.IdentityServer
                 options.AddProfile<IdentityServerAutoMapperProfile>(validate: true);
             });
 
-            Configure<AbpDistributedEventBusOptions>(options =>
+            Configure<AbpDistributedEntityEventOptions>(options =>
             {
                 options.EtoMappings.Add<ApiResource, ApiResourceEto>(typeof(AbpIdentityServerDomainModule));
                 options.EtoMappings.Add<Client, ClientEto>(typeof(AbpIdentityServerDomainModule));
@@ -93,6 +99,32 @@ namespace Volo.Abp.IdentityServer
                 identityServerBuilder.AddInMemoryApiResources(configuration.GetSection("IdentityServer:ApiResources"));
                 identityServerBuilder.AddInMemoryIdentityResources(configuration.GetSection("IdentityServer:IdentityResources"));
             }
+
+            identityServerBuilder.AddExtensionGrantValidator<LinkLoginExtensionGrantValidator>();
+        }
+
+        public override void PostConfigureServices(ServiceConfigurationContext context)
+        {
+            OneTimeRunner.Run(() =>
+            {
+                ModuleExtensionConfigurationHelper.ApplyEntityConfigurationToEntity(
+                    IdentityServerModuleExtensionConsts.ModuleName,
+                    IdentityServerModuleExtensionConsts.EntityNames.Client,
+                    typeof(Client)
+                );
+
+                ModuleExtensionConfigurationHelper.ApplyEntityConfigurationToEntity(
+                    IdentityServerModuleExtensionConsts.ModuleName,
+                    IdentityServerModuleExtensionConsts.EntityNames.IdentityResource,
+                    typeof(IdentityResource)
+                );
+
+                ModuleExtensionConfigurationHelper.ApplyEntityConfigurationToEntity(
+                    IdentityServerModuleExtensionConsts.ModuleName,
+                    IdentityServerModuleExtensionConsts.EntityNames.ApiResource,
+                    typeof(ApiResource)
+                );
+            });
         }
 
         public override void OnApplicationInitialization(ApplicationInitializationContext context)

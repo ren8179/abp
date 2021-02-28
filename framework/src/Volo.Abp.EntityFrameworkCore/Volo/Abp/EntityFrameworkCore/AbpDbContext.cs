@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -32,31 +34,33 @@ namespace Volo.Abp.EntityFrameworkCore
     public abstract class AbpDbContext<TDbContext> : DbContext, IAbpEfCoreDbContext, ITransientDependency
         where TDbContext : DbContext
     {
+        public IAbpLazyServiceProvider LazyServiceProvider { get; set; }
+
         protected virtual Guid? CurrentTenantId => CurrentTenant?.Id;
 
         protected virtual bool IsMultiTenantFilterEnabled => DataFilter?.IsEnabled<IMultiTenant>() ?? false;
 
         protected virtual bool IsSoftDeleteFilterEnabled => DataFilter?.IsEnabled<ISoftDelete>() ?? false;
 
-        public ICurrentTenant CurrentTenant { get; set; }
+        public ICurrentTenant CurrentTenant => LazyServiceProvider.LazyGetRequiredService<ICurrentTenant>();
 
-        public IGuidGenerator GuidGenerator { get; set; }
+        public IGuidGenerator GuidGenerator => LazyServiceProvider.LazyGetService<IGuidGenerator>(SimpleGuidGenerator.Instance);
 
-        public IDataFilter DataFilter { get; set; }
+        public IDataFilter DataFilter => LazyServiceProvider.LazyGetRequiredService<IDataFilter>();
 
-        public IEntityChangeEventHelper EntityChangeEventHelper { get; set; }
+        public IEntityChangeEventHelper EntityChangeEventHelper => LazyServiceProvider.LazyGetService<IEntityChangeEventHelper>(NullEntityChangeEventHelper.Instance);
 
-        public IAuditPropertySetter AuditPropertySetter { get; set; }
+        public IAuditPropertySetter AuditPropertySetter => LazyServiceProvider.LazyGetRequiredService<IAuditPropertySetter>();
 
-        public IEntityHistoryHelper EntityHistoryHelper { get; set; }
+        public IEntityHistoryHelper EntityHistoryHelper => LazyServiceProvider.LazyGetService<IEntityHistoryHelper>(NullEntityHistoryHelper.Instance);
 
-        public IAuditingManager AuditingManager { get; set; }
+        public IAuditingManager AuditingManager => LazyServiceProvider.LazyGetRequiredService<IAuditingManager>();
 
-        public IUnitOfWorkManager UnitOfWorkManager { get; set; }
+        public IUnitOfWorkManager UnitOfWorkManager => LazyServiceProvider.LazyGetRequiredService<IUnitOfWorkManager>();
 
-        public IClock Clock { get; set; }
+        public IClock Clock => LazyServiceProvider.LazyGetRequiredService<IClock>();
 
-        public ILogger<AbpDbContext<TDbContext>> Logger { get; set; }
+        public ILogger<AbpDbContext<TDbContext>> Logger => LazyServiceProvider.LazyGetService<ILogger<AbpDbContext<TDbContext>>>(NullLogger<AbpDbContext<TDbContext>>.Instance);
 
         private static readonly MethodInfo ConfigureBasePropertiesMethodInfo
             = typeof(AbpDbContext<TDbContext>)
@@ -82,15 +86,14 @@ namespace Volo.Abp.EntityFrameworkCore
         protected AbpDbContext(DbContextOptions<TDbContext> options)
             : base(options)
         {
-            GuidGenerator = SimpleGuidGenerator.Instance;
-            EntityChangeEventHelper = NullEntityChangeEventHelper.Instance;
-            EntityHistoryHelper = NullEntityHistoryHelper.Instance;
-            Logger = NullLogger<AbpDbContext<TDbContext>>.Instance;
+
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            TrySetDatabaseProvider(modelBuilder);
 
             foreach (var entityType in modelBuilder.Model.GetEntityTypes())
             {
@@ -105,6 +108,41 @@ namespace Volo.Abp.EntityFrameworkCore
                 ConfigureValueGeneratedMethodInfo
                     .MakeGenericMethod(entityType.ClrType)
                     .Invoke(this, new object[] { modelBuilder, entityType });
+            }
+        }
+
+        protected virtual void TrySetDatabaseProvider(ModelBuilder modelBuilder)
+        {
+            var provider = GetDatabaseProviderOrNull(modelBuilder);
+            if (provider != null)
+            {
+                modelBuilder.SetDatabaseProvider(provider.Value);
+            }
+        }
+
+        protected virtual EfCoreDatabaseProvider? GetDatabaseProviderOrNull(ModelBuilder modelBuilder)
+        {
+            switch (Database.ProviderName)
+            {
+                case "Microsoft.EntityFrameworkCore.SqlServer":
+                    return EfCoreDatabaseProvider.SqlServer;
+                case "Npgsql.EntityFrameworkCore.PostgreSQL":
+                    return EfCoreDatabaseProvider.PostgreSql;
+                case "Pomelo.EntityFrameworkCore.MySql":
+                    return EfCoreDatabaseProvider.MySql;
+                case "Oracle.EntityFrameworkCore":
+                case "Devart.Data.Oracle.Entity.EFCore":
+                    return EfCoreDatabaseProvider.Oracle;
+                case "Microsoft.EntityFrameworkCore.Sqlite":
+                    return EfCoreDatabaseProvider.Sqlite;
+                case "Microsoft.EntityFrameworkCore.InMemory":
+                    return EfCoreDatabaseProvider.InMemory;
+                case "FirebirdSql.EntityFrameworkCore.Firebird":
+                    return EfCoreDatabaseProvider.Firebird;
+                case "Microsoft.EntityFrameworkCore.Cosmos":
+                    return EfCoreDatabaseProvider.Cosmos;
+                default:
+                    return null;
             }
         }
 
@@ -145,17 +183,24 @@ namespace Volo.Abp.EntityFrameworkCore
             }
         }
 
+        /// <summary>
+        /// This method will call the DbContext <see cref="SaveChangesAsync(bool, CancellationToken)"/> method directly of EF Core, which doesn't apply concepts of abp.
+        /// </summary>
+        public virtual Task<int> SaveChangesOnDbContextAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+        {
+            return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
         public virtual void Initialize(AbpEfCoreDbContextInitializationContext initializationContext)
         {
             if (initializationContext.UnitOfWork.Options.Timeout.HasValue &&
                 Database.IsRelational() &&
                 !Database.GetCommandTimeout().HasValue)
             {
-                Database.SetCommandTimeout(initializationContext.UnitOfWork.Options.Timeout.Value.TotalSeconds.To<int>());
+                Database.SetCommandTimeout(TimeSpan.FromMilliseconds(initializationContext.UnitOfWork.Options.Timeout.Value));
             }
 
             ChangeTracker.CascadeDeleteTiming = CascadeTiming.OnSaveChanges;
-            ChangeTracker.DeleteOrphansTiming = CascadeTiming.OnSaveChanges;
 
             ChangeTracker.Tracked += ChangeTracker_Tracked;
         }
@@ -195,6 +240,7 @@ namespace Volo.Abp.EntityFrameworkCore
                 {
                     continue;
                 }
+
                 /* Checking "currentValue != null" has a good advantage:
                  * Assume that you we already using a named extra property,
                  * then decided to create a field (entity extension) for it.
@@ -205,7 +251,7 @@ namespace Volo.Abp.EntityFrameworkCore
                 var currentValue = e.Entry.CurrentValues[property.Name];
                 if (currentValue != null)
                 {
-                    entity.SetProperty(property.Name, currentValue);
+                    entity.ExtraProperties[property.Name] = currentValue;
                 }
             }
         }
@@ -266,14 +312,49 @@ namespace Volo.Abp.EntityFrameworkCore
                 return;
             }
 
-            foreach (var property in objectExtension.GetProperties())
+            var efMappedProperties = ObjectExtensionManager.Instance
+                .GetProperties(entityType)
+                .Where(p => p.IsMappedToFieldForEfCore());
+
+            foreach (var property in efMappedProperties)
             {
                 if (!entity.HasProperty(property.Name))
                 {
                     continue;
                 }
 
-                entry.Property(property.Name).CurrentValue = entity.GetProperty(property.Name);
+                var entryProperty = entry.Property(property.Name);
+                var entityProperty = entity.GetProperty(property.Name);
+                if (entityProperty == null)
+                {
+                    entryProperty.CurrentValue = null;
+                    continue;
+                }
+
+                if (entryProperty.Metadata.ClrType == entityProperty.GetType())
+                {
+                    entryProperty.CurrentValue = entityProperty;
+                }
+                else
+                {
+                    if (TypeHelper.IsPrimitiveExtended(entryProperty.Metadata.ClrType, includeEnums: true))
+                    {
+                        var conversionType = entryProperty.Metadata.ClrType;
+                        if (TypeHelper.IsNullable(conversionType))
+                        {
+                            conversionType = conversionType.GetFirstGenericArgumentIfNullable();
+                        }
+
+                        if (conversionType == typeof(Guid))
+                        {
+                            entryProperty.CurrentValue = TypeDescriptor.GetConverter(conversionType).ConvertFromInvariantString(entityProperty.ToString());
+                        }
+                        else
+                        {
+                            entryProperty.CurrentValue = Convert.ChangeType(entityProperty, conversionType, CultureInfo.InvariantCulture);
+                        }
+                    }
+                }
             }
         }
 
@@ -450,6 +531,11 @@ namespace Volo.Abp.EntityFrameworkCore
                 return;
             }
 
+            if (!typeof(IEntity).IsAssignableFrom(typeof(TEntity)))
+            {
+                return;
+            }
+
             modelBuilder.Entity<TEntity>().ConfigureByConvention();
 
             ConfigureGlobalFilters<TEntity>(modelBuilder, mutableEntityType);
@@ -476,7 +562,7 @@ namespace Volo.Abp.EntityFrameworkCore
                 !typeof(TEntity).IsDefined(typeof(OwnedAttribute), true) &&
                 !mutableEntityType.IsOwned())
             {
-                if (Clock == null || !Clock.SupportsMultipleTimezone)
+                if (LazyServiceProvider == null || Clock == null || !Clock.SupportsMultipleTimezone)
                 {
                     return;
                 }

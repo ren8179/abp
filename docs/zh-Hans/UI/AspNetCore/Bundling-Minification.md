@@ -167,7 +167,27 @@ public class MyWebExtensionModule : AbpModule
 }
 ````
 
-> 无法通过代码配置未命名的bundle tag helpers, 因为它们的名称在开发时是未知的. 建议始终使用bundle tag helper的名称.
+你也可以使用 `ConfigureAll` 方法配置所有现有的捆绑包:
+
+````C#
+[DependsOn(typeof(MyWebModule))]
+public class MyWebExtensionModule : AbpModule
+{
+    public override void ConfigureServices(ServiceConfigurationContext context)
+    {
+        Configure<AbpBundlingOptions>(options =>
+        {
+            options
+                .ScriptBundles
+                .ConfigureAll(bundle => {
+                    bundle.AddFiles(
+                        "/scripts/my-extension-script.js"
+                    );
+                });
+        });
+    }
+}
+````
 
 ### Bundle 贡献者
 
@@ -234,7 +254,7 @@ public class MyExtensionStyleBundleContributor : BundleContributor
 
 #### 贡献者扩展
 
-在某些高级应用场景中, 当用到一个bundle贡献者时，你可能想做一些额外的配置. 贡献者扩展可以和被扩展的贡献者无缝衔接.
+在某些高级应用场景中, 当用到一个bundle贡献者时,你可能想做一些额外的配置. 贡献者扩展可以和被扩展的贡献者无缝衔接.
 
 下面的示例为 prism.js 脚本库添加一些样式:
 

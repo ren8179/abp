@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using Volo.Abp.Cli.Commands;
 using Volo.Abp.Cli.Licensing;
 using Volo.Abp.Cli.ProjectBuilding.Analyticses;
@@ -25,12 +26,15 @@ namespace Volo.Abp.Cli.ProjectBuilding
         protected IJsonSerializer JsonSerializer { get; }
         protected IApiKeyService ApiKeyService { get; }
 
+        private readonly IConfiguration _configuration;
+
         public TemplateProjectBuilder(ISourceCodeStore sourceCodeStore,
             ITemplateInfoProvider templateInfoProvider,
             ICliAnalyticsCollect cliAnalyticsCollect,
             IOptions<AbpCliOptions> options,
             IJsonSerializer jsonSerializer,
-            IApiKeyService apiKeyService)
+            IApiKeyService apiKeyService,
+            IConfiguration configuration)
         {
             SourceCodeStore = sourceCodeStore;
             TemplateInfoProvider = templateInfoProvider;
@@ -38,13 +42,14 @@ namespace Volo.Abp.Cli.ProjectBuilding
             Options = options.Value;
             JsonSerializer = jsonSerializer;
             ApiKeyService = apiKeyService;
+            _configuration = configuration;
 
             Logger = NullLogger<TemplateProjectBuilder>.Instance;
         }
 
         public async Task<ProjectBuildResult> BuildAsync(ProjectBuildArgs args)
         {
-            var templateInfo = GetTemplateInfo(args);
+            var templateInfo = await GetTemplateInfoAsync(args);
 
             NormalizeArgs(args, templateInfo);
 
@@ -52,10 +57,34 @@ namespace Volo.Abp.Cli.ProjectBuilding
                 args.TemplateName,
                 SourceCodeTypes.Template,
                 args.Version,
-                args.TemplateSource
+                args.TemplateSource,
+                args.ExtraProperties.ContainsKey(NewCommand.Options.Preview.Long)
             );
 
-            var apiKeyResult = await ApiKeyService.GetApiKeyOrNullAsync();
+            DeveloperApiKeyResult apiKeyResult = null;
+
+#if DEBUG
+            try
+            {
+                var apiKeyResultSection = _configuration.GetSection("apiKeyResult");
+                if (apiKeyResultSection.Exists())
+                {
+                    apiKeyResult = apiKeyResultSection.Get<DeveloperApiKeyResult>(); //you can use user secrets
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
+
+            if (apiKeyResult == null)
+            {
+                apiKeyResult = await ApiKeyService.GetApiKeyOrNullAsync();
+            }
+#else
+            apiKeyResult = await ApiKeyService.GetApiKeyOrNullAsync();
+#endif
+
             if (apiKeyResult != null)
             {
                 if (apiKeyResult.ApiKey != null)
@@ -91,6 +120,7 @@ namespace Volo.Abp.Cli.ProjectBuilding
             var options = args.ExtraProperties
                 .Where(x => !x.Key.Equals(CliConsts.Command, StringComparison.InvariantCultureIgnoreCase))
                 .Where(x => !x.Key.Equals(NewCommand.Options.Tiered.Long, StringComparison.InvariantCultureIgnoreCase))
+                .Where(x => !x.Key.Equals(NewCommand.Options.Preview.Long, StringComparison.InvariantCultureIgnoreCase))
                 .Where(x => !x.Key.Equals(NewCommand.Options.DatabaseProvider.Long, StringComparison.InvariantCultureIgnoreCase) &&
                             !x.Key.Equals(NewCommand.Options.DatabaseProvider.Short, StringComparison.InvariantCultureIgnoreCase))
                 .Where(x => !x.Key.Equals(NewCommand.Options.OutputFolder.Long, StringComparison.InvariantCultureIgnoreCase) &&
@@ -145,11 +175,11 @@ namespace Volo.Abp.Cli.ProjectBuilding
             }
         }
 
-        private TemplateInfo GetTemplateInfo(ProjectBuildArgs args)
+        private async Task<TemplateInfo> GetTemplateInfoAsync(ProjectBuildArgs args)
         {
             if (args.TemplateName.IsNullOrWhiteSpace())
             {
-                return TemplateInfoProvider.GetDefault();
+                return await TemplateInfoProvider.GetDefaultAsync();
             }
             else
             {

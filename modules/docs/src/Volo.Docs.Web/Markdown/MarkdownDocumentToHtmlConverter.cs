@@ -44,7 +44,10 @@ namespace Volo.Docs.Markdown
                 languageCode
             );
 
-            return _markdownConverter.ConvertToHtml(content);
+            var html = _markdownConverter.ConvertToHtml(content);
+
+            return html;
+            //  return HtmlNormalizer.WrapImagesWithinAnchors(html);
         }
 
         protected virtual string NormalizeLinks(
@@ -71,6 +74,15 @@ namespace Volo.Docs.Markdown
             return Regex.Replace(content, MarkdownLinkRegExp, delegate (Match match)
             {
                 var link = match.Groups[3].Value;
+
+                var hashPart = "";
+                if (link.Contains("#"))
+                {
+                    var linkSplitted = link.Split("#");
+                    link = linkSplitted[0];
+                    hashPart = linkSplitted[1];
+                }
+
                 if (UrlHelper.IsExternalLink(link))
                 {
                     return match.Value;
@@ -95,6 +107,11 @@ namespace Volo.Docs.Markdown
                 if (!string.IsNullOrWhiteSpace(documentLocalDirectoryNormalized))
                 {
                     documentLocalDirectoryNormalized = "/" + documentLocalDirectoryNormalized;
+                }
+
+                if (!string.IsNullOrEmpty(hashPart))
+                {
+                    documentName += $"#{hashPart}";
                 }
 
                 return string.Format(

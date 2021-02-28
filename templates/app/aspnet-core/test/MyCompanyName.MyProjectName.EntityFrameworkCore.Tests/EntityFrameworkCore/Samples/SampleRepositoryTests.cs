@@ -14,6 +14,7 @@ namespace MyCompanyName.MyProjectName.EntityFrameworkCore.Samples
      * (like default AppUser repository IRepository<AppUser, Guid> here).
      * Only test your custom repository methods.
      */
+    [Collection(MyProjectNameTestConsts.CollectionDefinitionName)]
     public class SampleRepositoryTests : MyProjectNameEntityFrameworkCoreTestBase
     {
         private readonly IRepository<AppUser, Guid> _appUserRepository;
@@ -32,7 +33,7 @@ namespace MyCompanyName.MyProjectName.EntityFrameworkCore.Samples
             await WithUnitOfWorkAsync(async () =>
             {
                 //Act
-                var adminUser = await _appUserRepository
+                var adminUser = await (await _appUserRepository.GetQueryableAsync())
                     .Where(u => u.UserName == "admin")
                     .FirstOrDefaultAsync();
 

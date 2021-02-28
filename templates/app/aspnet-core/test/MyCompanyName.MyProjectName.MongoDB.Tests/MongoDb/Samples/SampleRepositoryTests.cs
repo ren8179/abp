@@ -13,7 +13,7 @@ namespace MyCompanyName.MyProjectName.MongoDB.Samples
      * (like default AppUser repository IRepository<AppUser, Guid> here).
      * Only test your custom repository methods.
      */
-    [Collection(MongoTestCollection.Name)]
+    [Collection(MyProjectNameTestConsts.CollectionDefinitionName)]
     public class SampleRepositoryTests : MyProjectNameMongoDbTestBase
     {
         private readonly IRepository<AppUser, Guid> _appUserRepository;
@@ -32,8 +32,7 @@ namespace MyCompanyName.MyProjectName.MongoDB.Samples
             await WithUnitOfWorkAsync(async () =>
             {
                 //Act
-                var adminUser = await _appUserRepository
-                    .GetMongoQueryable()
+                var adminUser = await (await _appUserRepository.GetMongoQueryableAsync())
                     .FirstOrDefaultAsync(u => u.UserName == "admin");
 
                 //Assert

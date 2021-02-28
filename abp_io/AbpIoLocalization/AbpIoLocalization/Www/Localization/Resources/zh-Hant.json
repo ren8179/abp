@@ -39,7 +39,7 @@
     "Theming": "主題",
     "ThemingExplanationShort": "使用和訂製基於bootstrap的標準UI主題,或建立自己的主題.",
     "BootstrapTagHelpersDynamicForms": "Bootstrap Tag Helpers和動態表單",
-    "BootstrapTagHelpersDynamicFormsExplanation": "內建的背景作業系統可以整合到Hangfire,RabbitMQ或您喜歡的任何工具中.", //TODO explanation doesn't match.
+    "BootstrapTagHelpersDynamicFormsExplanation": "與其手動重複編寫Bootstrap的組件,不如使用ABP的Tag Helpers利用智能感知來簡化它. 動態表單可以從C#類創建完整的表單.",
     "HTTPAPIsDynamicProxies": "HTTP APIs和動態代理",
     "HTTPAPIsDynamicProxiesExplanation": "自動將應用程式服務公開為REST樣式的HTTP API,並與動態JavaScript和C#代理一起使用.",
     "CompleteArchitectureInfo": "現在架構用來建立可維護的軟體解決方案.",
@@ -154,6 +154,7 @@
     "SeeTheDocumentForMoreInformation": "查看<a href=\"{1}\">{0} 文件</a>獲得更多訊息",
     "IndexPageHeroSection": "<span class=\"third-line shine2\"><strong>asp.net core的</strong></span><span class=\"first-line shine\"><strong>開源</strong></span><span class=\"second-line text-uppercase\">Web應用程式<br />框架 </span>",
     "UiFramework": "UI框架",
-    "EmailAddress": "電子信箱地址"
+    "EmailAddress": "電子信箱地址",
+    "SelectLanguage": "选择语言"
   }
 }

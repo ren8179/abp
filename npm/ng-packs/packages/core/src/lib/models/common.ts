@@ -1,16 +1,25 @@
-import { eLayoutType } from '../enums/common';
-import { Config } from './config';
-import { EventEmitter } from '@angular/core';
+import { EventEmitter, Type } from '@angular/core';
+import { Routes } from '@angular/router';
 import { Subject } from 'rxjs';
+import { eLayoutType } from '../enums/common';
+import { Environment } from './environment';
 
 export namespace ABP {
   export interface Root {
-    environment: Partial<Config.Environment>;
-    /**
-     *
-     * @deprecated To be deleted in v3.0
-     */
-    requirements?: Config.Requirements;
+    environment: Partial<Environment>;
+    registerLocaleFn: (locale: string) => Promise<any>;
+    skipGetAppConfiguration?: boolean;
+    sendNullsAsQueryParam?: boolean;
+  }
+
+  export interface HasPolicy {
+    requiredPolicy?: string;
+  }
+
+  export interface Test extends Partial<Root> {
+    baseHref?: string;
+    listQueryDebounceTime?: number;
+    routes?: Routes;
   }
 
   export type PagedResponse<T> = {
@@ -28,26 +37,37 @@ export namespace ABP {
     maxResultCount?: number;
   }
 
-  export interface Route {
-    children?: Route[];
-    invisible?: boolean;
-    layout?: eLayoutType;
+  export interface Lookup {
+    id: string;
+    displayName: string;
+  }
+
+  export interface Nav {
     name: string;
-    order?: number;
     parentName?: string;
-    path: string;
     requiredPolicy?: string;
+    order?: number;
+    invisible?: boolean;
+  }
+
+  export interface Route extends Nav {
+    path: string;
+    layout?: eLayoutType;
     iconClass?: string;
   }
 
-  export interface FullRoute extends Route {
-    url?: string;
-    wrapper?: boolean;
+  export interface Tab extends Nav {
+    component: Type<any>;
   }
 
   export interface BasicItem {
     id: string;
     name: string;
+  }
+
+  export interface Option<T> {
+    key: Extract<keyof T, string>;
+    value: T[Extract<keyof T, string>];
   }
 
   export interface Dictionary<T = any> {
